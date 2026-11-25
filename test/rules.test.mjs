@@ -9,7 +9,7 @@ import { readDocx, writeDocx } from '../dsh/docx.js'
 import { scanDarkBid, redactDarkBid } from '../dsh/dark-bid.js'
 import { extractFormat } from '../dsh/format-extract.js'
 import { checkSemantic } from '../dsh/semantic.js'
-import { listTemplates, loadRules, saveJob, loadJob, saveTemplate, getStats, rememberDocument } from '../dsh/store.js'
+import { loadJob, loadJobSource, saveJob, saveJobBundle, rememberDocument, listTemplates, loadRules, saveTemplate, getStats } from '../dsh/store.js'
 
 const root = dirname(fileURLToPath(new URL('../package.json', import.meta.url)))
 
@@ -72,6 +72,15 @@ test('暗标扫描与脱敏', () => {
   assert.match(next.paragraphs[0].text, /\*/)
 })
 
+test('作业原件和模型一起提交', async () => {
+  const data = await mkdtemp(join(tmpdir(), 'official-doc-bundle-'))
+  const source = Buffer.from('docx-bytes')
+  await saveJobBundle(data, { id: 'job-2', model: { paragraphs: [] }, type: 'notice', filename: 'a.docx' }, source)
+  const job = await loadJob(data, 'job-2')
+  assert.equal(job.filename, 'a.docx')
+  assert.deepEqual(await loadJobSource(data, 'job-2'), source)
+})
+
 test('作业持久化', async () => {
   const data = await mkdtemp(join(tmpdir(), 'official-doc-job-'))
   await saveJob(data, { id: 'job-1', model: { paragraphs: [] }, type: 'notice', filename: 'a.docx' })
@@ -118,4 +127,57 @@ test('规则合并保留两层检查项', () => {
 test('内置模板目录覆盖 22 文种', async () => {
   const templates = await listTemplates(root, root)
   assert.ok(templates.filter(item => item.builtin).length >= 22)
+})
+
+test('四级标题、文号、附件、版头和版记能识别', () => {
+  const model = parseMarkdown([
+    '# 关于测试的通知',
+    '××发〔2026〕1号',
+    '签发人：张三',
+    '各部门：',
+    '一、工作安排',
+    '（一）近期事项',
+    '1. 完成校审',
+    '（1）核对文号',
+    '请于今日完成。',
+    '附件：1. 校审清单',
+    '办公室',
+    '2026年11月25日',
+    '抄送：档案室',
+    '印发机关：办公室'
+  ].join('\n'))
+  const roles = model.paragraphs.map(item => item.role)
+  assert.deepEqual(roles, [
+    'title', 'documentNumber', 'issuer', 'recipient',
+    'heading1', 'heading2', 'heading3', 'heading4',
+    'body', 'attachment', 'signature', 'date', 'cc', 'colophon'
+  ])
+})
+
+test('层级标题按各自规则修复，未勾选时不改页边距', async () => {
+  const rules = await loadRules(root, root, 'notice')
+  const model = {
+    page: { widthMm: 200, heightMm: 300, top: 20, bottom: 20, left: 20, right: 20 },
+    paragraphs: [
+      { role: 'heading1', text: '一、安排', font: '宋体', size: 12 },
+      { role: 'heading2', text: '（一）事项', font: '宋体', size: 12 }
+    ]
+  }
+  const fixed = applyFixes(model, rules, ['heading1-font', 'heading2-font'])
+  assert.equal(fixed.paragraphs[0].font, '黑体')
+  assert.equal(fixed.paragraphs[1].font, '楷体_GB2312')
+  assert.equal(fixed.page.widthMm, 200)
+})
+
+test('22 文种规则都能解析并保留结构', async () => {
+  const templates = await listTemplates(root, root)
+  const builtin = templates.filter(item => item.builtin)
+  assert.equal(builtin.length, 22)
+  for (const template of builtin) {
+    const rules = await loadRules(root, root, template.id)
+    assert.equal(typeof rules.name, 'string')
+    assert.ok(rules.structure?.length, template.id)
+    assert.ok(rules.common?.page?.width_mm, template.id)
+    assert.ok(rules.fix_rules?.some(item => item.action === 'heading4'))
+  }
 })

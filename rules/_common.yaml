@@ -19,6 +19,22 @@ common:
     font: 黑体
     size_pt: 16
     align: left
+  heading1:
+    font: 黑体
+    size_pt: 16
+    align: left
+  heading2:
+    font: 楷体_GB2312
+    size_pt: 16
+    align: left
+  heading3:
+    font: 仿宋_GB2312
+    size_pt: 16
+    align: left
+  heading4:
+    font: 仿宋_GB2312
+    size_pt: 16
+    align: left
 check_rules:
   - id: page-size
     name: 页面尺寸
@@ -63,3 +79,11 @@ fix_rules:
     action: body
   - id: fix-title
     action: title
+  - id: fix-heading1
+    action: heading1
+  - id: fix-heading2
+    action: heading2
+  - id: fix-heading3
+    action: heading3
+  - id: fix-heading4
+    action: heading4

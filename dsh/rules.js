@@ -1,3 +1,5 @@
+import { parse as parseYaml } from 'yaml'
+import { inferRole } from './roles.js'
 import { checkSemantic } from './semantic.js'
 import { TYPE_ALIASES } from './types.js'
 
@@ -8,46 +10,10 @@ export function detectType(filename) {
 }
 
 export function parseRules(text) {
-  const lines = String(text ?? '').replace(/^\uFEFF/, '').split(/\r?\n/)
-  const root = {}
-  const stack = [{ indent: -1, value: root }]
-  for (const raw of lines) {
-    if (!raw.trim() || raw.trim().startsWith('#')) continue
-    const indent = raw.match(/^ */)?.[0].length ?? 0
-    const content = raw.trim()
-    while (stack.length > 1 && indent <= stack[stack.length - 1].indent) stack.pop()
-    const parent = stack[stack.length - 1].value
-    if (content.startsWith('- ')) {
-      if (!Array.isArray(parent)) throw new Error('规则列表位置不正确')
-      const item = content.slice(2)
-      if (item.includes(':')) {
-        const entry = {}
-        const [key, ...rest] = item.split(':')
-        entry[key.trim()] = cast(rest.join(':').trim())
-        parent.push(entry)
-        stack.push({ indent, value: entry })
-      } else parent.push(cast(item))
-      continue
-    }
-    const split = content.indexOf(':')
-    if (split < 0) throw new Error(`规则行无法读取：${content}`)
-    const key = content.slice(0, split).trim()
-    const inline = content.slice(split + 1).trim()
-    if (inline) parent[key] = cast(inline)
-    else {
-      const container = []
-      parent[key] = container
-      stack.push({ indent, value: container })
-    }
-  }
-  return root
-}
-
-function cast(value) {
-  if (value === 'true') return true
-  if (value === 'false') return false
-  if (/^-?\d+(\.\d+)?$/.test(value)) return Number(value)
-  return value.replace(/^["']|["']$/g, '')
+  const rules = parseYaml(String(text ?? ''), { uniqueKeys: true })
+  if (rules == null) return {}
+  if (typeof rules !== 'object' || Array.isArray(rules)) throw new Error('规则文件根节点必须为对象')
+  return rules
 }
 
 export function mergeRules(common, specific) {
@@ -87,7 +53,8 @@ export function checkModel(model, rules) {
   }
 
   for (const paragraph of model.paragraphs ?? []) {
-    if (paragraph.role === 'title') {
+    const role = paragraph.role
+    if (role === 'title') {
       if (paragraph.font !== expected.title?.font) {
         issues.push(issue('title-font', 'P0', '标题字体', 'title.font', paragraph.text,
           `改为${expected.title?.font}`, '标题使用方正小标宋简体', '7.3.2', paragraph))
@@ -101,7 +68,7 @@ export function checkModel(model, rules) {
           `改为${expected.title.size_pt}磅`, '标题字号不符', '7.3.2', paragraph))
       }
     }
-    if (paragraph.role === 'body') {
+    if (role === 'body') {
       if (paragraph.font !== expected.body?.font) {
         issues.push(issue('body-font', 'P0', '正文字体', 'body.font', paragraph.text,
           `改为${expected.body?.font}`, '正文使用仿宋', '7.3.3', paragraph))
@@ -111,9 +78,20 @@ export function checkModel(model, rules) {
           '改为三号', '正文使用三号字', '7.3.3', paragraph))
       }
     }
-    if (paragraph.role === 'heading' && expected.heading?.font && paragraph.font !== expected.heading.font) {
+    if (role.startsWith('heading')) {
+      const heading = expected[role] ?? expected.heading ?? {}
+      if (heading.font && paragraph.font !== heading.font) issues.push(issue(`${role}-font`, 'P2', '层次标题字体', `${role}.font`, paragraph.text, `改为${heading.font}`, '层次标题字体不符', '7.3.3', paragraph))
+      if (heading.size_pt && paragraph.size !== heading.size_pt) issues.push(issue(`${role}-size`, 'P2', '层次标题字号', `${role}.size`, paragraph.text, `改为${heading.size_pt}磅`, '层次标题字号不符', '7.3.3', paragraph))
+      continue
+    }
+    if (role === 'heading' && expected.heading?.font && paragraph.font !== expected.heading.font) {
       issues.push(issue('heading-font', 'P2', '层次标题字体', 'heading.font', paragraph.text,
         `改为${expected.heading.font}`, '层次标题字体不符', '7.3.3', paragraph))
+    }
+    for (const field of ['font', 'size_pt', 'align']) {
+      const configured = expected[role]?.[field]
+      const actual = field === 'size_pt' ? paragraph.size : paragraph[field]
+      if (configured != null && actual !== configured) issues.push(issue(`${role}-${field === 'size_pt' ? 'size' : field}`, field === 'font' ? 'P0' : 'P1', `${roleName(role)}${field === 'font' ? '字体' : field === 'size_pt' ? '字号' : '对齐'}`, `${role}.${field}`, paragraph.text, `改为${configured}`, `${roleName(role)}格式不符`, '7.3.3', paragraph))
     }
   }
 
@@ -169,9 +147,11 @@ export function applyFixes(model, rules, selected = null) {
       paragraph.line = rules.common?.body?.line_pt
       paragraph.firstLineIndent = rules.common?.body?.first_indent_chars
     }
-    if (paragraph.role === 'heading' && actions.has('heading') && (!allow || allow.has('heading-font'))) {
-      paragraph.font = rules.common?.heading?.font || '黑体'
-      paragraph.size = rules.common?.heading?.size_pt || 16
+    const role = paragraph.role ?? ''
+    if (role.startsWith('heading') && actions.has(role) && (!allow || allow.has(`${role}-font`) || allow.has(`${role}-size`))) {
+      const heading = rules.common?.[role] ?? rules.common?.heading ?? {}
+      paragraph.font = heading.font || paragraph.font
+      paragraph.size = heading.size_pt || paragraph.size
     }
   }
   return next
@@ -181,59 +161,38 @@ export function parseMarkdown(markdown, type = 'notice') {
   const lines = String(markdown ?? '').replace(/\r\n/g, '\n').split('\n')
   const paragraphs = []
   const tables = []
-  let i = 0
-  while (i < lines.length) {
-    const raw = lines[i]
-    const text = raw.trim()
-    if (!text) { i += 1; continue }
-    if (text.includes('|') && i + 1 < lines.length && /^\|?\s*:?-{3,}/.test(lines[i + 1].trim())) {
-      const header = splitRow(text)
-      i += 2
+  let index = 0
+  while (index < lines.length) {
+    const text = lines[index].trim()
+    if (!text) { index += 1; continue }
+    if (text.includes('|') && index + 1 < lines.length && /^\|?\s*:?-{3,}/.test(lines[index + 1].trim())) {
+      const headers = splitRow(text)
+      index += 2
       const rows = []
-      while (i < lines.length && lines[i].includes('|')) {
-        rows.push(splitRow(lines[i].trim()))
-        i += 1
-      }
-      tables.push({ headers: header, rows })
-      paragraphs.push({
-        role: 'body',
-        text: `[表格 ${header.join(' / ')}]`,
-        font: '仿宋',
-        size: 16,
-        align: 'left',
-        tableIndex: tables.length - 1
-      })
+      while (index < lines.length && lines[index].includes('|')) rows.push(splitRow(lines[index++].trim()))
+      tables.push({ headers, rows })
+      paragraphs.push({ role: 'body', text: `[表格 ${headers.join(' / ')}]`, font: '仿宋_GB2312', size: 16, align: 'left', tableIndex: tables.length - 1 })
       continue
     }
-    const list = text.match(/^([-*+]|\d+\.)\s+(.*)$/)
-    if (list) {
-      paragraphs.push({ role: 'body', text: `• ${list[2]}`, font: '仿宋', size: 16, align: 'justify', line: 28, firstLineIndent: 2 })
-      i += 1
-      continue
-    }
-    const heading = text.match(/^(#{1,3})\s+(.*)$/)
+    const heading = text.match(/^(#{1,6})\s+(.*)$/)
     if (heading) {
       const level = heading[1].length
-      paragraphs.push({
-        role: level === 1 ? 'title' : 'heading',
-        text: stripMd(heading[2]),
-        font: level === 1 ? '方正小标宋简体' : '黑体',
-        size: level === 1 ? 22 : 16,
-        align: level === 1 ? 'center' : 'left'
-      })
-      i += 1
+      paragraphs.push(level === 1
+        ? { role: 'title', text: stripMd(heading[2]), font: '方正小标宋简体', size: 22, align: 'center' }
+        : { role: `heading${Math.min(level - 1, 4)}`, headingLevel: Math.min(level - 1, 4), text: stripMd(heading[2]), font: level === 2 ? '黑体' : '楷体_GB2312', size: 16, align: 'left' })
+      index += 1
       continue
     }
-    paragraphs.push(roleFromText(stripMd(text)))
-    i += 1
+    const list = text.match(/^[-*+]\s+(.*)$/)
+    if (list) {
+      paragraphs.push({ role: 'body', text: list[2], font: '仿宋_GB2312', size: 16, align: 'justify', line: 28, firstLineIndent: 2 })
+      index += 1
+      continue
+    }
+    paragraphs.push(roleFromText(stripMd(text), null))
+    index += 1
   }
-  return {
-    type,
-    page: standardPage(),
-    paragraphs,
-    tables,
-    meta: { type, layoutProfile: 'formal' }
-  }
+  return { type, page: standardPage(), paragraphs, tables, meta: { type, layoutProfile: 'formal' } }
 }
 
 export function sampleModel(type, name) {
@@ -262,11 +221,24 @@ function stripMd(text) {
   return String(text).replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*(.*?)\*/g, '$1').replace(/`([^`]+)`/g, '$1')
 }
 
-function roleFromText(text) {
-  if (/：$/.test(text)) return { role: 'recipient', text, font: '仿宋', size: 16, align: 'left' }
-  if (/\d{4}年\d{1,2}月\d{1,2}日$/.test(text)) return { role: 'date', text, font: '仿宋', size: 16, align: 'right' }
-  if (text.length <= 30 && !/[。！？]$/.test(text)) return { role: 'signature', text, font: '仿宋', size: 16, align: 'right' }
-  return { role: 'body', text, font: '仿宋', size: 16, align: 'justify', line: 28, firstLineIndent: 2 }
+function roleFromText(text, align = 'left') {
+  const value = String(text ?? '').trim()
+  const role = inferRole(value, align).role
+  const heading = /^heading([1-4])$/.exec(role)
+  if (heading) {
+    const level = Number(heading[1])
+    const font = level === 1 ? '黑体' : level === 2 ? '楷体_GB2312' : '仿宋_GB2312'
+    return { role, headingLevel: level, text: value, font, size: 16, align: 'left' }
+  }
+  const styled = {
+    title: { font: '方正小标宋简体', size: 22, align: 'center' },
+    issuer: { font: '楷体_GB2312', size: 16, align: 'right' },
+    date: { font: '仿宋_GB2312', size: 16, align: 'right' },
+    signature: { font: '仿宋_GB2312', size: 16, align: 'right' }
+  }[role]
+  if (styled) return { role, text: value, ...styled }
+  if (role === 'body') return { role, text: value, font: '仿宋_GB2312', size: 16, align: 'justify', line: 28, firstLineIndent: 2 }
+  return { role, text: value, font: '仿宋_GB2312', size: 16, align: 'left' }
 }
 
 function standardPage() {
@@ -305,6 +277,15 @@ function roleName(role) {
     body: '正文',
     signature: '署名',
     date: '成文日期',
-    heading: '层次标题'
+    heading: '层次标题',
+    heading1: '一级标题',
+    heading2: '二级标题',
+    heading3: '三级标题',
+    heading4: '四级标题',
+    documentNumber: '发文字号',
+    attachment: '附件说明',
+    issuer: '签发人',
+    colophon: '版记',
+    cc: '抄送'
   }[role] ?? role
 }

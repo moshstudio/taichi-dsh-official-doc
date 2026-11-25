@@ -1,8 +1,15 @@
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { readFile } from 'node:fs/promises'
-import { readDocx, writeDocx } from './docx.js'
-import { applyFixes, checkModel, detectType, parseMarkdown, sampleModel } from './rules.js'
+import { readDocx, writeDocx, patchDocx } from './docx.js'
+import { chargeAccount, loadAccount, refundAccount } from './account.js'
+import {
+  applyFixes,
+  checkModel,
+  detectType,
+  parseMarkdown,
+  sampleModel
+} from './rules.js'
 import { scanDarkBid, redactDarkBid } from './dark-bid.js'
 import { extractFormat } from './format-extract.js'
 import {
@@ -13,9 +20,11 @@ import {
   listHistory,
   listTemplates,
   loadJob,
+  loadJobSource,
   loadRules,
   rememberDocument,
   saveJob,
+  saveJobBundle,
   saveTemplate,
   updateHistoryStatus,
   updateTemplateRules
@@ -48,8 +57,12 @@ export function apply(ctx, config) {
     ['GET', '/api/plugin/taichi_official_doc/types', () => documentTypeList()],
     ['GET', '/api/plugin/taichi_official_doc/meta', async () => ({
       version: JSON.parse(await readFile(join(PACKAGE_ROOT, 'package.json'), 'utf8')).version,
-      rules: await availableRuleCount(PACKAGE_ROOT)
+      rules: await availableRuleCount(PACKAGE_ROOT),
+      account: await loadAccount(root)
     })],
+    ['GET', '/api/plugin/taichi_official_doc/account', () => loadAccount(root)],
+    ['POST', '/api/plugin/taichi_official_doc/account/charge', (body) => chargeAccount(root, body?.action)],
+    ['POST', '/api/plugin/taichi_official_doc/account/refund', (body) => refundAccount(root, body?.action)],
     ['GET', '/api/plugin/taichi_official_doc/preview', (_body, request) => previewJob(root, request)]
   ]
   for (const [method, path, handle] of routes) {
@@ -84,6 +97,10 @@ function queryId(request) {
   }
 }
 
+const MAX_UPLOAD_BYTES = 8 * 1024 * 1024
+
+export { MAX_UPLOAD_BYTES }
+
 async function check(root, body) {
   const type = body?.type || detectType(body?.filename)
   const model = await modelFrom(body)
@@ -92,7 +109,8 @@ async function check(root, body) {
   const rules = await loadRules(PACKAGE_ROOT, root, type)
   const issues = checkModel(model, rules)
   const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-  await saveJob(root, { id, model, type, filename: body?.filename || '公文.docx', issues })
+  const source = body?.bytes ? uploadBytes(body.bytes) : null
+  await saveJobBundle(root, { id, model, type, filename: body?.filename || '公文.docx', issues }, source)
   await rememberDocument(root, { id, name: body?.filename || '未命名', type, issues: issues.length, status: 'checked' })
   return { id, type, issues, model: previewDto(model) }
 }
@@ -113,13 +131,14 @@ async function previewJob(root, request) {
 
 async function fix(root, body) {
   const job = await loadJob(root, body?.id)
+  const source = await loadJobSource(root, job.id)
   const rules = await loadRules(PACKAGE_ROOT, root, job.type)
   const fixed = applyFixes(job.model, rules, Array.isArray(body?.issues) ? body.issues : null)
   await saveJob(root, { ...job, model: fixed, issues: checkModel(fixed, rules) })
   await updateHistoryStatus(root, job.id, 'optimized')
   return {
     filename: String(job.filename || '公文.docx').replace(/\.docx$/i, '') + '-已修复.docx',
-    bytes: await writeDocx(fixed),
+    bytes: source ? await patchDocx(source, fixed) : await writeDocx(fixed),
     model: previewDto(fixed)
   }
 }
@@ -131,13 +150,14 @@ async function darkBid(root, body) {
 
 async function darkBidRedact(root, body) {
   const job = body?.id ? await loadJob(root, body.id) : null
+  const source = job ? await loadJobSource(root, job.id) : null
   const model = job?.model ?? await modelFrom(body)
   const { model: next, hits } = redactDarkBid(model, body?.selected)
   if (job) await saveJob(root, { ...job, model: next })
   return {
     hits,
     filename: String(job?.filename || body?.filename || '公文.docx').replace(/\.docx$/i, '') + '-已脱敏.docx',
-    bytes: await writeDocx(next),
+    bytes: source ? await patchDocx(source, next) : await writeDocx(next),
     model: previewDto(next)
   }
 }
@@ -190,7 +210,13 @@ async function modelFrom(body) {
   if (!body?.bytes) throw new Error('请上传 docx')
   const name = String(body.filename ?? '')
   if (/\.(doc|wps)$/i.test(name)) throw new Error('请先另存为 .docx 后再上传（本插件不内嵌 doc/wps 转换）')
-  return readDocx(body.bytes)
+  return readDocx(uploadBytes(body.bytes))
+}
+
+function uploadBytes(value) {
+  const bytes = Buffer.isBuffer(value) ? value : Buffer.from(value)
+  if (bytes.length > MAX_UPLOAD_BYTES) throw new Error('文件超过 8 MiB')
+  return bytes
 }
 
 function hydrateModel(model) {
@@ -204,12 +230,13 @@ function hydrateModel(model) {
 }
 
 function previewDto(model) {
+  const { originalParagraphs: _originalParagraphs, originalPage: _originalPage, ...meta } = model.meta ?? {}
   return {
     type: model.type,
     page: model.page,
     paragraphs: model.paragraphs ?? [],
     tables: model.tables ?? [],
-    meta: model.meta ?? {}
+    meta
   }
 }
 

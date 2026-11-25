@@ -4,9 +4,9 @@
   "description": "Official-document workspace for DSH Desktop: dashboard, format checks, Markdown drafting, review, dark-bid scan, and templates.",
   "license": "MIT",
   "type": "module",
-  "main": "./dsh/index.js",
+  "main": "./dsh/index.mjs",
   "exports": {
-    ".": "./dsh/index.js",
+    ".": "./dsh/index.mjs",
     "./client": "./lib/client.js",
     "./package.json": "./package.json"
   },
@@ -14,11 +14,15 @@
     "cordis.patch.yml",
     "dsh",
     "lib",
+    "src",
     "rules",
     "templates",
     "LICENSE",
     "README.md",
-    "screenshots.json"
+    "screenshots.json",
+    "tsdown.config.ts",
+    "tsconfig.json",
+    "types"
   ],
   "dsh": {
     "bundle": {
@@ -28,19 +32,29 @@
       "platform": "web",
       "inject": [
         "@deepseek-ai/dsh-client-ui-primitives",
-        "@deepseek-ai/dsh-client-ui-renderer",
-        "react"
+        "react",
+        "react-dom"
       ]
     }
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1 || ^4.0.6-alpha.1 || ^4.1.0",
     "@deepseek-ai/dsh-client-ui-primitives": "^0.2.2-rc.1 || ^0.2.2-rc.5",
-    "@deepseek-ai/dsh-client-ui-renderer": "^0.2.2-rc.1 || ^0.2.2-rc.5",
-    "react": "^18.2.0"
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
   },
   "scripts": {
     "test": "node --test test/*.test.mjs",
-    "build:client": "node scripts/build-client.mjs"
+    "build": "npm run typecheck && tsdown",
+    "build:client": "npm run typecheck && tsdown --config tsdown.config.ts --name client",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.10",
+    "tsdown": "^0.23.7",
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "yaml": "^2.9.1"
   }
 }

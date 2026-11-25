@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { apply } from '../dsh/index.js'
+import { mkdtemp } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { chargeAccount, loadAccount, refundAccount } from '../dsh/account.js'
+import { apply, MAX_UPLOAD_BYTES } from '../dsh/index.js'
 
 test('服务端路由走 connection.fetch 且路径不重复', () => {
   const routes = []
@@ -28,6 +32,31 @@ test('服务端路由走 connection.fetch 且路径不重复', () => {
     ['GET', '/api/plugin/taichi_official_doc/stats'],
     ['GET', '/api/plugin/taichi_official_doc/types'],
     ['GET', '/api/plugin/taichi_official_doc/meta'],
+    ['GET', '/api/plugin/taichi_official_doc/account'],
+    ['POST', '/api/plugin/taichi_official_doc/account/charge'],
+    ['POST', '/api/plugin/taichi_official_doc/account/refund'],
     ['GET', '/api/plugin/taichi_official_doc/preview']
   ])
+})
+
+test('超过 8 MiB 的上传被拒绝', async () => {
+  const routes = []
+  apply({
+    connection: { fetch: { register(route) { routes.push(route) } } }
+  }, { root: 'data' })
+  const check = routes.find(route => route.path.endsWith('/check'))
+  const response = await check.fetch({
+    json: async () => ({ filename: 'big.docx', bytes: Buffer.alloc(MAX_UPLOAD_BYTES + 1) })
+  })
+  assert.equal(response.status, 400)
+  assert.match((await response.json()).error, /8 MiB/)
+})
+
+test('积分先扣后退回，余额不足时拒绝', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'official-doc-account-'))
+  assert.equal((await loadAccount(root)).balance, 20)
+  assert.equal((await chargeAccount(root, 'analyze')).balance, 18)
+  assert.equal((await refundAccount(root, 'analyze')).balance, 20)
+  for (let index = 0; index < 20; index += 1) await chargeAccount(root, 'polish')
+  await assert.rejects(() => chargeAccount(root, 'draft'), /积分不足/)
 })
