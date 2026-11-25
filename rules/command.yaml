@@ -1,0 +1,7 @@
+name: 命令
+title_prefix: 命令
+structure:
+  - title
+  - body
+  - signature
+  - date

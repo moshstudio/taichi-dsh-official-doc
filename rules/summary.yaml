@@ -1,0 +1,7 @@
+name: 总结
+title_prefix: 总结
+structure:
+  - title
+  - body
+  - signature
+  - date

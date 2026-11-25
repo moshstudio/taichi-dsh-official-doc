@@ -1,0 +1,8 @@
+name: 批复
+title_prefix: 批复
+structure:
+  - title
+  - recipient
+  - body
+  - signature
+  - date

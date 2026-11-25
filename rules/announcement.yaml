@@ -1,0 +1,7 @@
+name: 通告
+title_prefix: 通告
+structure:
+  - title
+  - body
+  - signature
+  - date

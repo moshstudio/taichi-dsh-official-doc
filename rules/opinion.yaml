@@ -1,0 +1,8 @@
+name: 意见
+title_prefix: 意见
+structure:
+  - title
+  - recipient
+  - body
+  - signature
+  - date

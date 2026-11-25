@@ -1,0 +1,7 @@
+name: 议案
+title_prefix: 议案
+structure:
+  - title
+  - body
+  - signature
+  - date

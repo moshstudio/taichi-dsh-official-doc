@@ -1,0 +1,7 @@
+name: 制度
+title_prefix: 制度
+structure:
+  - title
+  - body
+  - signature
+  - date

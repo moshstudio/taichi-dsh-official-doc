@@ -1,0 +1,7 @@
+name: 纪要
+title_prefix: 纪要
+structure:
+  - title
+  - body
+  - signature
+  - date

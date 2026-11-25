@@ -1,0 +1,7 @@
+name: 决定
+title_prefix: 决定
+structure:
+  - title
+  - body
+  - signature
+  - date

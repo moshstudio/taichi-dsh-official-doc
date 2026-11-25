@@ -1,0 +1,8 @@
+name: 通报
+title_prefix: 通报
+structure:
+  - title
+  - recipient
+  - body
+  - signature
+  - date

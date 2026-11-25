@@ -1,0 +1,7 @@
+name: 公报
+title_prefix: 公报
+structure:
+  - title
+  - body
+  - signature
+  - date

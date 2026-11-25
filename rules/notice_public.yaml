@@ -1,0 +1,7 @@
+name: 公告
+title_prefix: 公告
+structure:
+  - title
+  - body
+  - signature
+  - date

@@ -1,0 +1,8 @@
+name: 指示
+title_prefix: 指示
+structure:
+  - title
+  - recipient
+  - body
+  - signature
+  - date

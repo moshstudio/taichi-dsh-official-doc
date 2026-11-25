@@ -1,0 +1,7 @@
+name: 技术方案
+title_prefix: 技术方案
+structure:
+  - title
+  - body
+  - signature
+  - date

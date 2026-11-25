@@ -1,7 +1,7 @@
 {
   "name": "taichi-dsh-official-doc",
-  "version": "0.1.0",
-  "description": "Official-document workspace for DSH Desktop: format checks, Markdown drafting, review, and templates.",
+  "version": "0.2.0",
+  "description": "Official-document workspace for DSH Desktop: dashboard, format checks, Markdown drafting, review, dark-bid scan, and templates.",
   "license": "MIT",
   "type": "module",
   "main": "./dsh/index.js",
@@ -28,19 +28,19 @@
       "platform": "web",
       "inject": [
         "@deepseek-ai/dsh-client-ui-primitives",
+        "@deepseek-ai/dsh-client-ui-renderer",
         "react"
       ]
     }
   },
-  "dependencies": {
-    "jszip": "^3.10.1"
-  },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1 || ^4.0.6-alpha.1 || ^4.1.0",
     "@deepseek-ai/dsh-client-ui-primitives": "^0.2.2-rc.1 || ^0.2.2-rc.5",
+    "@deepseek-ai/dsh-client-ui-renderer": "^0.2.2-rc.1 || ^0.2.2-rc.5",
     "react": "^18.2.0"
   },
   "scripts": {
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/*.test.mjs",
+    "build:client": "node scripts/build-client.mjs"
   }
 }

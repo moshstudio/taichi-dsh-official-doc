@@ -15,6 +15,10 @@ common:
     font: 方正小标宋简体
     size_pt: 22
     align: center
+  heading:
+    font: 黑体
+    size_pt: 16
+    align: left
 check_rules:
   - id: page-size
     name: 页面尺寸

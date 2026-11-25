@@ -1,0 +1,7 @@
+name: 工作方案
+title_prefix: 工作方案
+structure:
+  - title
+  - body
+  - signature
+  - date

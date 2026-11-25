@@ -1,0 +1,7 @@
+name: 决议
+title_prefix: 决议
+structure:
+  - title
+  - body
+  - signature
+  - date

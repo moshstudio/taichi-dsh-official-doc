@@ -1,0 +1,7 @@
+name: 会议纪要
+title_prefix: 会议纪要
+structure:
+  - title
+  - body
+  - signature
+  - date
