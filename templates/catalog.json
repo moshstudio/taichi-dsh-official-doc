@@ -1,0 +1,26 @@
+[
+  {
+    "id": "notice",
+    "name": "通知",
+    "description": "布置工作、传达事项。",
+    "builtin": true
+  },
+  {
+    "id": "report",
+    "name": "报告",
+    "description": "向上级汇报工作。",
+    "builtin": true
+  },
+  {
+    "id": "request",
+    "name": "请示",
+    "description": "向上级请求指示或批准。",
+    "builtin": true
+  },
+  {
+    "id": "letter",
+    "name": "函",
+    "description": "不相隶属机关之间商洽工作。",
+    "builtin": true
+  }
+]

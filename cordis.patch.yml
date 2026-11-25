@@ -1,0 +1,5 @@
+- insert:
+    - id: taichi-dsh-official-doc
+      name: taichi-dsh-official-doc
+      config:
+        root: !!js dshHomePath('taichi-dsh-official-doc')

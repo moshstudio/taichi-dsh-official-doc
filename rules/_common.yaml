@@ -1,0 +1,61 @@
+common:
+  page:
+    width_mm: 210
+    height_mm: 297
+    margin_top_mm: 37
+    margin_bottom_mm: 35
+    margin_left_mm: 28
+    margin_right_mm: 26
+  body:
+    font: 仿宋
+    size_pt: 16
+    line_pt: 28
+    first_indent_chars: 2
+  title:
+    font: 方正小标宋简体
+    size_pt: 22
+    align: center
+check_rules:
+  - id: page-size
+    name: 页面尺寸
+    severity: P0
+    field: page.size
+    expected: A4
+    message: 公文用 A4。
+  - id: page-margin
+    name: 页边距
+    severity: P1
+    field: page.margin
+    expected: 上37 下35 左28 右26
+    message: 页边距按 GB/T 9704。
+  - id: body-font
+    name: 正文字体
+    severity: P0
+    field: body.font
+    expected: 仿宋
+    message: 正文使用仿宋。
+  - id: body-size
+    name: 正文字号
+    severity: P0
+    field: body.size
+    expected: 16
+    message: 正文使用三号字。
+  - id: title-font
+    name: 标题字体
+    severity: P0
+    field: title.font
+    expected: 方正小标宋简体
+    message: 标题使用方正小标宋简体。
+  - id: title-align
+    name: 标题对齐
+    severity: P1
+    field: title.align
+    expected: center
+    message: 标题居中。
+fix_rules:
+  - id: fix-page
+    action: page
+  - id: fix-body
+    action: body
+  - id: fix-title
+    action: title

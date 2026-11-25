@@ -1,0 +1,8 @@
+name: 报告
+title_prefix: 报告
+structure:
+  - title
+  - recipient
+  - body
+  - signature
+  - date

@@ -1,0 +1,8 @@
+name: 函
+title_prefix: 函
+structure:
+  - title
+  - recipient
+  - body
+  - signature
+  - date

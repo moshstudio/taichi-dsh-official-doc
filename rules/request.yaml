@@ -1,0 +1,8 @@
+name: 请示
+title_prefix: 请示
+structure:
+  - title
+  - recipient
+  - body
+  - signature
+  - date

@@ -1,0 +1,8 @@
+name: 通知
+title_prefix: 通知
+structure:
+  - title
+  - recipient
+  - body
+  - signature
+  - date
